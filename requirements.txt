@@ -5,3 +5,5 @@ ipykernel
 scikit-learn
 dotenv
 numpy
+tensorboard
+xgboost

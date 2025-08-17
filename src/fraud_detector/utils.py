@@ -20,8 +20,17 @@ def load_data():
 
 def data_preprocessing(df):
     """
-    Preprocess the DataFrame by dropping NaN values in 'label' column
-    and returning the cleaned DataFrame.
+    Apply preprocesing steps raw data.
+    Args:
+        df (pd.DataFrame): Raw data DataFrame.
     """
-    df = df.dropna(subset=["label"])  # Drop rows with NaN in 'label'
+    df = df.dropna(subset=["label"])
+
+    # fill in NaN values for income using 0.
+    # hypthesis. Missing income means no income reported.
+    df["reported_income"] = df["reported_income"].fillna(0)
+
+    # encode labels:
+    df["label"] = df["label"].map({"CLEAN": 0, "EDITED": 1})
+
     return df

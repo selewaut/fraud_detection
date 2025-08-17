@@ -3,60 +3,21 @@ import pandas as pd
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from dotenv import load_dotenv
 from sklearn.impute import SimpleImputer
 from sklearn.metrics import auc, confusion_matrix, f1_score, precision_recall_curve
 from sklearn.model_selection import train_test_split
+from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 from torch.utils.data import DataLoader, Dataset
-from fraud_detector.utils import load_data
-from fraud_detector.utils import data_preprocessing
+from torch.utils.tensorboard import SummaryWriter
 
-# Load data
-df = load_data()
-
-df = data_preprocessing(df)
-
-# Features and target
-features = [
-    "edge_noise",
-    "text_density",
-    "grayscale_variance",
-    "alpha_channel_density",
-    "unique_font_colors",
-    "reported_income",
-]
-
-df = df.dropna(subset="label")  # Drop rows with NaN in features or label
-X = df[features]
-y = df["label"]
-
-# Encode label: CLEAN=0, EDITED=1
-
-label_encoder = LabelEncoder()
-y = label_encoder.fit_transform(y)  # Now y is numpy array of 0/1
-
-# Impute missing values (mean)
-imputer = SimpleImputer(strategy="mean")
-X_imputed = imputer.fit_transform(X)
-
-# Scale features
-scaler = StandardScaler()
-X_scaled = scaler.fit_transform(X_imputed)
-
-# Train/test split (stratified for imbalance)
-X_train, X_test, y_train, y_test = train_test_split(
-    X_scaled, y, test_size=0.2, random_state=42, stratify=y
-)
-
-print(f"Train shape: {X_train.shape}, Test shape: {X_test.shape}")
-print(f"Class distribution in train: {np.bincount(y_train)}")
+from fraud_detector.utils import data_preprocessing, load_data
 
 
 class CustomDataset(Dataset):
     def __init__(self, X, y):
         self.X = torch.tensor(X, dtype=torch.float32)
-        self.y = torch.tensor(y, dtype=torch.float32).unsqueeze(1)  # For BCE loss
+        self.y = torch.tensor(y, dtype=torch.float32).unsqueeze(1)
 
     def __len__(self):
         return len(self.y)
@@ -65,19 +26,11 @@ class CustomDataset(Dataset):
         return self.X[idx], self.y[idx]
 
 
-# Create datasets
-train_dataset = CustomDataset(X_train, y_train)
-test_dataset = CustomDataset(X_test, y_test)
-
-# DataLoaders (batch size small for small dataset)
-batch_size = 32
-train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
-
-
-class SimpleNN(nn.Module):
+# model
+class NNFraudDetector(nn.Module):
     def __init__(self, input_size=6):
-        super(SimpleNN, self).__init__()
+        super(NNFraudDetector, self).__init__()
+
         self.fc = nn.Sequential(
             nn.Linear(input_size, 150),
             nn.ReLU(),
@@ -96,11 +49,70 @@ class SimpleNN(nn.Module):
         return self.fc(x)
 
 
+# Load data
+df = load_data()
+
+df = data_preprocessing(df)
+
+features = [
+    "edge_noise",
+    "text_density",
+    "grayscale_variance",
+    "alpha_channel_density",
+    "unique_font_colors",
+    "reported_income",
+]
+
+X = df[features]
+y = df["label"]
+
+label_encoder = LabelEncoder()
+y = label_encoder.fit_transform(y)
+
+
+# Train/test split (stratified for imbalance)
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y, test_size=0.2, random_state=42, stratify=y
+)
+
+# Create a pipeline for imputation and scaling (only use training data set for fitting)
+preprocessing_pipeline = Pipeline(
+    [
+        ("imputer", SimpleImputer(strategy="mean")),
+        ("scaler", StandardScaler()),
+    ]
+)
+
+# Fit and transform features
+X_train = preprocessing_pipeline.fit_transform(X_train)
+X_test = preprocessing_pipeline.transform(X_test)
+
+
+print(f"Train shape: {X_train.shape}, Test shape: {X_test.shape}")
+print(f"Class distribution in train: {np.bincount(y_train)}")
+
+# Create datasets
+train_dataset = CustomDataset(X_train, y_train)
+test_dataset = CustomDataset(X_test, y_test)
+
+# DataLoaders (batch size small for small dataset)
+batch_size = 32
+train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
+
+
 # Initialize model, loss, optimizer
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-model = SimpleNN().to(device)
+print(f"Using device: {device}")
+model = NNFraudDetector().to(device)
+
 criterion = nn.BCEWithLogitsLoss()  # For binary classification
 optimizer = optim.Adam(model.parameters(), lr=0.001, weight_decay=1e-5)
+
+# tensorboard setup
+import time
+
+writer = SummaryWriter(f"runs/fraud_detector_experiment_{time.time()}")
 
 
 def train_model(
@@ -114,7 +126,7 @@ def train_model(
     for epoch in range(epochs):
         model.train()
         train_loss = 0
-        for X_batch, y_batch in train_loader:
+        for i, (X_batch, y_batch) in enumerate(train_loader):
             X_batch, y_batch = X_batch.to(device), y_batch.to(device)
             optimizer.zero_grad()
             outputs = model(X_batch)
@@ -125,6 +137,9 @@ def train_model(
 
         train_loss /= len(train_loader)
         train_losses.append(train_loss)
+
+        # log training loss
+        writer.add_scalar("training_loss", train_loss, epoch)
 
         # Validate mode
         model.eval()
@@ -138,8 +153,17 @@ def train_model(
         val_loss /= len(test_loader)
         val_losses.append(val_loss)
 
+        # log validation loss
+        writer.add_scalar("validation_loss", val_loss, epoch)
+
         print(
             f"Epoch {epoch+1}/{epochs} - Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}"
+        )
+
+        writer.add_scalars(
+            "losses",
+            {"train": train_loss, "val": val_loss},
+            epoch,
         )
 
         # Early stopping
@@ -240,7 +264,9 @@ def plot_decision_boundary(ax, X, y, model, title, columns):
 X_train_df = pd.DataFrame(X_train, columns=features)
 X_test_df = pd.DataFrame(X_test, columns=features)
 
+
 from itertools import combinations
+from sklearn.pipeline import Pipeline
 
 cols = ["alpha_channel_density", "edge_noise", "grayscale_variance"]
 
@@ -256,4 +282,8 @@ for pair in combinations(cols, 2):
     )
 
     plt.tight_layout()  # Adjust layout to prevent overlap
+
+    # Add figure to TensorBoard
+    writer.add_figure(f"Decision_Boundary_{pair[0]}_{pair[1]}", fig, global_step=0)
+
     plt.show()
