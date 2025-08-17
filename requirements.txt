@@ -1,0 +1,7 @@
+pandas==2.3.1
+seaborn
+matplotlib
+ipykernel
+scikit-learn
+dotenv
+numpy
