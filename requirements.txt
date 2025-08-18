@@ -7,3 +7,5 @@ dotenv
 numpy
 tensorboard
 xgboost
+flask
+requests

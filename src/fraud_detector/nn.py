@@ -4,7 +4,14 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from sklearn.impute import SimpleImputer
-from sklearn.metrics import auc, confusion_matrix, f1_score, precision_recall_curve
+from sklearn.metrics import (
+    auc,
+    confusion_matrix,
+    f1_score,
+    precision_recall_curve,
+    precision_score,
+    recall_score,
+)
 from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import LabelEncoder, StandardScaler
@@ -182,7 +189,7 @@ def train_model(
     return train_losses, val_losses
 
 
-def evaluate_model(model, test_loader):
+def evaluate_model(model, test_loader, dataset_name="Test"):
     model.eval()
     y_true = []
     y_pred = []
@@ -209,9 +216,13 @@ def evaluate_model(model, test_loader):
     pr_auc = auc(recall, precision)
     f1 = f1_score(y_true, y_pred)
 
-    print(f"Test Set Confusion Matrix: TN={tn}, FP={fp}, FN={fn}, TP={tp}")
+    print(f"{dataset_name} Set Confusion Matrix: TN={tn}, FP={fp}, FN={fn}, TP={tp}")
     print(f"PR AUC: {pr_auc:.3f}")
     print(f"F1 Score: {f1:.3f}")
+    precision = precision_score(y_true, y_pred)
+    recall = recall_score(y_true, y_pred)
+    print(f"{dataset_name} Precision: {precision:.3f}")
+    print(f"{dataset_name} Recall: {recall:.3f}")
 
 
 # Train
@@ -266,6 +277,7 @@ X_test_df = pd.DataFrame(X_test, columns=features)
 
 
 from itertools import combinations
+
 from sklearn.pipeline import Pipeline
 
 cols = ["alpha_channel_density", "edge_noise", "grayscale_variance"]
@@ -283,7 +295,7 @@ for pair in combinations(cols, 2):
 
     plt.tight_layout()  # Adjust layout to prevent overlap
 
-    # Add figure to TensorBoard
-    writer.add_figure(f"Decision_Boundary_{pair[0]}_{pair[1]}", fig, global_step=0)
+    # # Add figure to TensorBoard
+    # writer.add_figure(f"Decision_Boundary_{pair[0]}_{pair[1]}", fig, global_step=0)
 
     plt.show()
