@@ -22,6 +22,10 @@ Fraud detection ML usecase
    ```bash
    pip install -e .
    ```
+9 Install pytorch GPU optional
+   ```bash
+   pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu12.8
+   ```
 
 
 For testing and running repositoy follow the steps below:

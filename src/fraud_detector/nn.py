@@ -199,8 +199,8 @@ def evaluate_model(model, test_loader, dataset_name="Test"):
         for X_batch, y_batch in test_loader:
             X_batch = X_batch.to(device)
             outputs = model(X_batch)
-            probs = torch.sigmoid(outputs)  # Probabilities
-            preds = (probs > 0.5).float()  # Binary predictions
+            probs = torch.sigmoid(outputs)
+            preds = (probs > 0.5).float()
 
             y_true.extend(y_batch.cpu().numpy())
             y_pred.extend(preds.cpu().numpy())
@@ -246,14 +246,14 @@ def plot_decision_boundary(ax, X, y, model, title, columns):
 
     # Prepare full grid with mean values for other columns (already scaled)
     grid = np.c_[xx.ravel(), yy.ravel()]
-    full_grid = np.full((grid.shape[0], len(features)), 0.0)  # Placeholder
+    full_grid = np.full((grid.shape[0], len(features)), 0.0)
     col_idx0 = features.index(columns[0])
     col_idx1 = features.index(columns[1])
     full_grid[:, col_idx0] = grid[:, 0]
     full_grid[:, col_idx1] = grid[:, 1]
     for i, col in enumerate(features):
         if i not in [col_idx0, col_idx1]:
-            full_grid[:, i] = X_train[:, i].mean()  # Use train mean (scaled)
+            full_grid[:, i] = X_train[:, i].mean()
 
     # Predict with PyTorch
     model.eval()
@@ -296,6 +296,4 @@ for pair in combinations(cols, 2):
     plt.tight_layout()  # Adjust layout to prevent overlap
 
     # # Add figure to TensorBoard
-    # writer.add_figure(f"Decision_Boundary_{pair[0]}_{pair[1]}", fig, global_step=0)
-
-    plt.show()
+    writer.add_figure(f"Decision_Boundary_{pair[0]}_{pair[1]}", fig, global_step=0)

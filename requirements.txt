@@ -9,3 +9,4 @@ tensorboard
 xgboost
 flask
 requests
+torch
